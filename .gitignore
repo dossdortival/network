@@ -1,0 +1,75 @@
+### Django ###
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# Virtual environment
+venv/
+ENV/
+.env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node.js
+node_modules/
+
+# Static files at development time
+staticfiles/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Database migrations (uncomment if you want to ignore them)
+# migrations/
+
+# Testing
+.coverage
+htmlcov/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Backup files
+*.bak
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Debug
+debug.log
+
+# Local development
+*.local.yml
+docker-compose.override.yml
+
+# Coverage reports
+.coverage
+.coverage.*
