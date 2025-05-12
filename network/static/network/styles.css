@@ -1,0 +1,15 @@
+.body {
+    margin: 20px;
+}
+
+.post {
+    margin-bottom: 20px;
+}
+
+.like-btn, .edit-btn {
+    cursor: pointer;
+}
+
+textarea {
+    resize: none;
+}
