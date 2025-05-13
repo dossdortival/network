@@ -5,7 +5,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.core.paginator import Paginator
 
-from .models import User, Post
+from .models import User, Post, Follow
 import json
 
 
@@ -118,3 +118,25 @@ def post(request, post_id):
 
     else:
         return JsonResponse({"error": "Invalid request method."}, status=400)
+
+
+def profile(request, username):
+    user = User.objects.get(username=username)
+    posts = Post.objects.filter(user=user).order_by("-timestamp")
+    paginator = Paginator(posts, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    following_count = user.following.count()
+    followers_count = user.followers.count()
+    is_following = False
+    if request.user.is_authenticated and request.user != user:
+        is_following = Follow.objects.filter(follower=request.user, followed=user).exists()
+
+    return render(request, "network/profile.html", {
+        "profile_user": user,
+        "posts": page_obj,
+        "following_count": following_count,
+        "followers_count": followers_count,
+        "is_following": is_following
+    })
