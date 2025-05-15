@@ -1,6 +1,5 @@
-from django.contrib.auth.models import AbstractUser
 from django.db import models
-
+from django.contrib.auth.models import AbstractUser 
 
 class User(AbstractUser):
     pass
@@ -8,32 +7,29 @@ class User(AbstractUser):
 class Post(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
     likes = models.ManyToManyField(User, related_name="liked_posts", blank=True)
 
     def __str__(self):
-        return f"Post by {self.user.username} at {self.created_at}"
-    
+        return f"Post by {self.user.username} at {self.timestamp}"
+
     def serialize(self):
         return {
             "id": self.id,
             "user": self.user.username,
             "content": self.content,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
+            "timestamp": self.timestamp.strftime("%b %d %Y, %I:%M %p"),
             "likes": self.likes.count(),
-            "is_liked": False
+            "is_liked": False  
         }
 
-
-class Follow(models.Model):
+class Follow(models.Model): 
     follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
     followed = models.ForeignKey(User, on_delete=models.CASCADE, related_name="followers")
-    created_at = models.DateTimeField(auto_now_add=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('follower', 'followed')
 
     def __str__(self):
-        return f"{self.follower.username} follows {self.followed.username}"
+        return f"{self.follower.username} follows {self.followed.username}" 
