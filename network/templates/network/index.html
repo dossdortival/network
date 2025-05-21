@@ -1,21 +1,34 @@
 {% extends "network/layout.html" %}
+{% load static %}
+
+{% block script %}
+    <script src="{% static 'network/index.js' %}"></script>
+{% endblock %}
 
 {% block body %}
-    <div class="container">
+    <div class="container mt-4">
+        <h2>All Posts</h2>
+        
         {% if user.is_authenticated %}
-            <div class="card mb-4">
+            <div class="card mb-4" id="new-post-container">
                 <div class="card-body">
                     <h5 class="card-title">New Post</h5>
-                    <form id="new-post-form">
-                        <textarea class="form-control mb-2" id="post-content" rows="3" required></textarea>
-                        <button type="submit" class="btn btn-primary">Post</button>
-                    </form>
+                    <div class="form-group">
+                        <textarea class="form-control" id="post-content" rows="3" placeholder="What's on your mind?"></textarea>
+                    </div>
+                    <button class="btn btn-primary" id="submit-post">Post</button>
                 </div>
             </div>
         {% endif %}
         
-        <div id="posts-view">
-            {% include "network/posts.html" %}
+        <div id="posts-container">
+            <!-- Posts will be loaded here via JavaScript -->
+        </div>
+        
+        <div class="pagination-controls mt-3 text-center">
+            <button id="prev-page" class="btn btn-outline-primary mr-2" style="display: none;">Previous</button>
+            <span id="page-info">Page <span id="current-page">1</span></span>
+            <button id="next-page" class="btn btn-outline-primary ml-2" style="display: none;">Next</button>
         </div>
     </div>
 {% endblock %}

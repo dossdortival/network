@@ -1,35 +1,39 @@
 {% extends "network/layout.html" %}
+{% load static %}
+
+{% block script %}
+    <script src="{% static 'network/profile.js' %}"></script>
+{% endblock %}
 
 {% block body %}
-    <div class="container">
-        <div class="card mb-4">
+    <div class="container mt-4">
+        <div class="card mb-4" id="profile-info">
             <div class="card-body">
-                <h2 class="card-title">{{ profile_user.username }}</h2>
-                <div class="d-flex justify-content-around">
-                    <div class="text-center">
-                        <h5>Following</h5>
-                        <p>{{ following_count }}</p>
+                <h2 class="card-title">{{ profile_username }}</h2>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Followers:</strong> <span id="followers-count">0</span></p>
                     </div>
-                    <div class="text-center">
-                        <h5>Followers</h5>
-                        <p>{{ followers_count }}</p>
+                    <div class="col-md-6">
+                        <p><strong>Following:</strong> <span id="following-count">0</span></p>
                     </div>
                 </div>
-                {% if user.is_authenticated and user != profile_user %}
-                    <form class="follow-form" data-username="{{ profile_user.username }}">
-                        {% csrf_token %}
-                        {% if is_following %}
-                            <button type="submit" class="btn btn-danger">Unfollow</button>
-                        {% else %}
-                            <button type="submit" class="btn btn-primary">Follow</button>
-                        {% endif %}
-                    </form>
+                
+                {% if user.is_authenticated and user.username != profile_username %}
+                    <button class="btn btn-primary" id="follow-button" data-username="{{ profile_username }}">Follow</button>
                 {% endif %}
             </div>
         </div>
         
-        <div id="posts-view">
-            {% include "network/posts.html" %}
+        <h3>Posts</h3>
+        <div id="posts-container">
+            <!-- Posts will be loaded here via JavaScript -->
+        </div>
+        
+        <div class="pagination-controls mt-3 text-center">
+            <button id="prev-page" class="btn btn-outline-primary mr-2" style="display: none;">Previous</button>
+            <span id="page-info">Page <span id="current-page">1</span></span>
+            <button id="next-page" class="btn btn-outline-primary ml-2" style="display: none;">Next</button>
         </div>
     </div>
 {% endblock %}
