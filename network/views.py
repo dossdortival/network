@@ -1,17 +1,18 @@
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.core.paginator import Paginator
+from django.views.decorators.csrf import csrf_exempt
 
-from .models import User, Post, Follow
+from .models import User, Post
 import json
 
 
 def index(request):
     return render(request, "network/index.html")
-
 
 def login_view(request):
     if request.method == "POST":
@@ -65,118 +66,216 @@ def register(request):
         return render(request, "network/register.html")
 
 
-def posts(request):
-    posts = Post.objects.all().order_by("-created_at")
+def posts(request, page=1):
+    """
+    Get all posts with pagination
+    """
+    posts = Post.objects.all()
     paginator = Paginator(posts, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = paginator.get_page(page)
+
+    posts_data = [post.serialize() for post in page_obj]
     
-    # Check if each post is liked by the current user
-    for post in page_obj:
-        if request.user.is_authenticated:
-            post.is_liked = post.likes.filter(id=request.user.id).exists()
+    # Mark posts liked by current user
+    if request.user.is_authenticated:
+        for post_data in posts_data:
+            post = Post.objects.get(id=post_data["id"])
+            post_data["liked_by_user"] = request.user in post.likes.all()
     
-    return render(request, "network/posts.html", {
-        "posts": page_obj
+    return JsonResponse({
+        "posts": posts_data,
+        "page": page,
+        "has_next": page_obj.has_next(),
+        "has_previous": page_obj.has_previous(),
+        "page_count": paginator.num_pages
     })
 
+@csrf_exempt
+@login_required
+def new_post(request):
+    """
+    create a new post
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST request required."}, status=400)
+    
+    # Get post content from request
+    data = json.loads(request.body)
+    content = data.get("content", "")
+    
+    # Check if content is empty
+    if not content:
+        return JsonResponse({"error": "Post content cannot be empty."}, status=400)
+    
+    # Create new post
+    post = Post(author=request.user, content=content)
+    post.save()
+    
+    return JsonResponse({"message": "Post created successfully.", "post": post.serialize()}, status=201)
 
-def post(request, post_id):
+@csrf_exempt
+@login_required
+def edit_post(request, post_id):
+    """
+    Edit a post
+    """
+    # Get the post
     try:
-        post = Post.objects.get(pk=post_id)
+        post = Post.objects.get(id=post_id)
     except Post.DoesNotExist:
-        return HttpResponse("Post not found", status=404)
+        return JsonResponse({"error": "Post not found."}, status=404)
     
-    if request.method == "GET":
-        return JsonResponse(post.serialize())
+    # Check if user is the author
+    if post.author != request.user:
+        return JsonResponse({"error": "You are not authorized to edit this post."}, status=403)
     
-    elif request.method == "PUT":
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "You must be logged in to edit a post."}, status=403)
-        if request.user != post.user:
-            return JsonResponse({"error": "You can only edit your own posts."}, status=403)
-        
+    if request.method == "PUT":
         data = json.loads(request.body)
         post.content = data.get("content", post.content)
         post.save()
-        return JsonResponse({"message": "Post updated successfully."}, status=200)
-        
-    elif request.method == "POST":
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "You must be logged in to like a post."}, status=403)
-
-        action = request.POST.get("action")
-        if action == "like":
-            post.likes.add(request.user)
-            post.is_liked = True
-        elif action == "unlike":
-            post.likes.remove(request.user)
-            post.is_liked = False
-        else:
-            return JsonResponse({"error": "Invalid action."}, status=400)        
-        return JsonResponse({"message": "Success", "likes": post.likes.count()}, status=200)
-
-    else:
-        return JsonResponse({"error": "Invalid request method."}, status=400)
-
-
-def profile(request, username):
-    user = User.objects.get(username=username)
-    posts = Post.objects.filter(user=user).order_by("-created_at")
-    paginator = Paginator(posts, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    following_count = user.following.count()
-    followers_count = user.followers.count()
-    is_following = False
-    if request.user.is_authenticated and request.user != user:
-        is_following = Follow.objects.filter(follower=request.user, followed=user).exists()
-
-    return render(request, "network/profile.html", {
-        "profile_user": user,
-        "posts": page_obj,
-        "following_count": following_count,
-        "followers_count": followers_count,
-        "is_following": is_following
-    })
-
-
-def following(request):
-    if not request.user.is_authenticated:
-        return HttpResponseRedirect(reverse("login"))
+        return JsonResponse({"message": "Post updated successfully.", "post": post.serialize()})
     
-    following_users = User.objects.filter(followers__follower=request.user)
-    posts = Post.objects.filter(user__in=following_users).order_by("-created_at")
-    paginator = Paginator(posts, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    return JsonResponse({"error": "PUT request required."}, status=400)
 
-    return render(request, "network/following.html", {
-        "posts": page_obj
-    })
-
-def follow(request, username):
-    if not request.user.is_authenticated:
-        return JsonResponse({"error": "You must be logged in to follow someone."}, status=403)
-    
+@csrf_exempt
+@login_required
+def like_post(request, post_id):
+    """
+    liking/unliking a post
+    """
+    # Get the post
     try:
-        user_to_follow = User.objects.get(username=username)
+        post = Post.objects.get(id=post_id)
+    except Post.DoesNotExist:
+        return JsonResponse({"error": "Post not found."}, status=404)
+    
+    if request.method == "PUT":
+        # Toggle like
+        if request.user in post.likes.all():
+            post.likes.remove(request.user)
+            liked = False
+        else:
+            post.likes.add(request.user)
+            liked = True
+        
+        return JsonResponse({
+            "message": "Like updated successfully.",
+            "likes_count": post.likes.count(),
+            "liked": liked
+        })
+    
+    return JsonResponse({"error": "PUT request required."}, status=400)
+
+
+def profile(request, username, page=1):
+    """
+    View for user profile page
+    """
+    # Get the requested user profile
+    try:
+        profile_user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return HttpResponseRedirect(reverse("index"))
+    
+    # If it's an API request, return user data and posts
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Get user posts with pagination
+        posts = Post.objects.filter(author=profile_user)
+        paginator = Paginator(posts, 10)
+        page_obj = paginator.get_page(page)
+        
+        # Serialize the posts
+        posts_data = [post.serialize() for post in page_obj]
+        
+        # Mark posts liked by current user
+        if request.user.is_authenticated:
+            for post_data in posts_data:
+                post = Post.objects.get(id=post_data["id"])
+                post_data["liked_by_user"] = request.user in post.likes.all()
+        
+        # Check if current user follows the profile user
+        is_following = False
+        if request.user.is_authenticated:
+            is_following = profile_user in request.user.following.all()
+        
+        return JsonResponse({
+            "user": profile_user.serialize(),
+            "posts": posts_data,
+            "is_following": is_following,
+            "page": page,
+            "has_next": page_obj.has_next(),
+            "has_previous": page_obj.has_previous(),
+            "page_count": paginator.num_pages
+        })
+    
+    # Otherwise, render the profile page
+    return render(request, "network/profile.html", {
+        "profile_username": username
+    })
+
+@csrf_exempt
+@login_required
+def follow(request, username):
+    """
+    API endpoint for following/unfollowing a user
+    """
+    # Get the user to follow/unfollow
+    try:
+        to_follow = User.objects.get(username=username)
     except User.DoesNotExist:
         return JsonResponse({"error": "User not found."}, status=404)
     
-    if request.user == user_to_follow:
+    # Can't follow yourself
+    if request.user == to_follow:
         return JsonResponse({"error": "You cannot follow yourself."}, status=400)
     
-    if request.method == "POST":
-        action = request.POST.get("action")
-        if action == "follow":
-            Follow.objects.get_or_create(follower=request.user, followed=user_to_follow)
-            return JsonResponse({"message": "Successfully followed.", "action": "unfollow"}, status=200)
-        elif action == "unfollow":
-            Follow.objects.filter(follower=request.user, followed=user_to_follow).delete()
-            return JsonResponse({"message": "Successfully unfollowed.", "action": "follow"}, status=200)
+    if request.method == "PUT":
+        # Toggle follow
+        if to_follow in request.user.following.all():
+            request.user.following.remove(to_follow)
+            following = False
         else:
-            return JsonResponse({"error": "Invalid action."}, status=400)
+            request.user.following.add(to_follow)
+            following = True
+        
+        return JsonResponse({
+            "message": "Follow updated successfully.",
+            "following": following,
+            "followers_count": to_follow.followers.count()
+        })
     
-    return JsonResponse({"error": "POST request required."}, status=400)
+    return JsonResponse({"error": "PUT request required."}, status=400)
+
+@csrf_exempt
+@login_required
+def following_posts(request, page=1):
+    """
+    View for posts from users the current user follows
+    """
+    # If it's just a page request, render the template
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return render(request, "network/following.html")
+    
+    # Get all posts from users the current user follows
+    following_users = request.user.following.all()
+    posts = Post.objects.filter(author__in=following_users)
+    
+    # Set up pagination
+    paginator = Paginator(posts, 10)
+    page_obj = paginator.get_page(page)
+    
+    # Serialize the posts
+    posts_data = [post.serialize() for post in page_obj]
+    
+    # Mark posts liked by current user
+    for post_data in posts_data:
+        post = Post.objects.get(id=post_data["id"])
+        post_data["liked_by_user"] = request.user in post.likes.all()
+    
+    return JsonResponse({
+        "posts": posts_data,
+        "page": page,
+        "has_next": page_obj.has_next(),
+        "has_previous": page_obj.has_previous(),
+        "page_count": paginator.num_pages
+    })
